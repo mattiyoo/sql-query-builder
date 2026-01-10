@@ -181,20 +181,26 @@ export function AutocompleteInput({
       multiValue: (provided: any) => ({
         ...provided,
         backgroundColor: 'transparent',
+        padding: 0,
+        margin: 0,
+        border: 'none',
       }),
       multiValueLabel: (provided: any) => ({
         ...provided,
         color: 'var(--color-gray-900)',
         fontSize: '0.875rem',
         fontWeight: '500',
+        padding: 0,
+        paddingLeft: 0,
       }),
       multiValueRemove: (provided: any) => ({
         ...provided,
-        color: '#581c87',
-        ':hover': {
-          backgroundColor: '#e9d5ff',
-          color: '#581c87',
-        },
+        display: 'none',
+      }),
+      valueContainer: (provided: any) => ({
+        ...provided,
+        padding: '2px 8px',
+        gap: 0,
       }),
     } as any;
   }, [isMulti]);
@@ -361,6 +367,23 @@ export function AutocompleteInput({
 
   const NoRemove = () => null;
 
+  const MultiValueLabel = useCallback((props: any) => {
+    const { children, data, selectProps } = props;
+    const values = selectProps.value || [];
+    const index = values.findIndex((v: SelectOption) => v.value === data.value);
+    const isLast = index === values.length - 1;
+    const isFirst = index === 0;
+
+    return (
+      <div className="inline">
+        <span className={clsx(
+          isFirst ? '' : 'ml-1'
+        )}>{children}</span>
+        {!isLast && <span> or </span>}
+      </div>
+    );
+  }, []);
+
   return (
     <SelectComponent
       key={selectKey}
@@ -382,13 +405,17 @@ export function AutocompleteInput({
       onMenuClose={() => {
         setMenuIsOpen(false);
         setSearchInput('');
+        if (isMulti) {
+          const currentValues = Array.isArray(value) ? value : [];
+          setStagedValues(currentValues);
+        }
       }}
       closeMenuOnSelect={!isMulti}
       hideSelectedOptions={false}
       {...commonSelectProps}
       onCreateOption={handleCreateOption}
       formatCreateLabel={(inputValue: string) => `Use "${inputValue}"`}
-      components={{ Option, MenuList, MultiValueRemove: NoRemove }}
+      components={{ Option, MenuList, MultiValueRemove: NoRemove, MultiValueLabel }}
       onInputChange={(newValue) => {
         setSearchInput(newValue);
         return stagedValues;

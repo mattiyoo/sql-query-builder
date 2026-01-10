@@ -23,58 +23,73 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
 
   const [isOpen, setIsOpen] = useState(false);
   const [currentMonth, setCurrentMonth] = useState(today)
-  const [selectedStartDate, setSelectedStartDate] = useState<Date | null>(null);
-  const [selectedEndDate, setSelectedEndDate] = useState<Date | null>(today);
+  const [appliedDurationValue, setAppliedDurationValue] = useState<number | null>(null);
+  const [stagedStartDate, setStagedStartDate] = useState<Date | null>(null);
+  const [stagedEndDate, setStagedEndDate] = useState<Date | null>(today);
   const [hoverDate, setHoverDate] = useState<Date | null>(null);
-  const [durationValue, setDurationValue] = useState<number>(15);
-  const [durationUnit, setDurationUnit] = useState<DurationUnit>('days');
+  const [stagedDurationValue, setStagedDurationValue] = useState<number>(15);
+  const [stagedDurationUnit, setStagedDurationUnit] = useState<DurationUnit>('days');
   const [showDurationSelector, setShowDurationSelector] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    setSelectedEndDate(today);
+    setStagedEndDate(today);
   }, [today]);
 
-  const durationInDays = useMemo(() => {
-    if (selectedStartDate && selectedEndDate) {
-      const diffTime = Math.abs(selectedEndDate.getTime() - selectedStartDate.getTime());
+  const stagedDurationInDays = useMemo(() => {
+    if (stagedStartDate && stagedEndDate) {
+      const diffTime = Math.abs(stagedEndDate.getTime() - stagedStartDate.getTime());
       const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
       return diffDays;
     }
     return 0;
-  }, [selectedStartDate, selectedEndDate]);
+  }, [stagedStartDate, stagedEndDate]);
 
   useEffect(() => {
-    if (value) {
-      if (Array.isArray(value) && value.length === 2 && typeof value[0] === 'string') {
-        const start = new Date(value[0]);
-        if (!isNaN(start.getTime())) {
-          setSelectedStartDate(start);
-          setSelectedEndDate(today);
-        }
-      } else if (typeof value === 'string') {
-        const date = new Date(value);
-        if (!isNaN(date.getTime())) {
-          setSelectedStartDate(date);
-          setSelectedEndDate(today);
-        }
-      }
+    if (typeof value === 'number' && value > 0) {
+      setAppliedDurationValue(value);
     } else {
-      setSelectedStartDate(null);
-      setSelectedEndDate(today);
+      setAppliedDurationValue(null);
     }
-  }, [value, today]);
+  }, [value]);
 
   useEffect(() => {
-    if (selectedStartDate && selectedEndDate && durationInDays > 0) {
-      setDurationValue(durationInDays);
+    if (isOpen) {
+      if (appliedDurationValue) {
+        setStagedDurationValue(appliedDurationValue);
+        const startDate = new Date(today);
+        startDate.setDate(today.getDate() - appliedDurationValue + 1);
+        setStagedStartDate(startDate);
+        setStagedEndDate(today);
+      } else {
+        setStagedStartDate(null);
+        setStagedEndDate(today);
+        setStagedDurationValue(15);
+      }
     }
-  }, [selectedStartDate, selectedEndDate, durationInDays]);
+  }, [isOpen, appliedDurationValue, today]);
+
+  useEffect(() => {
+    if (stagedStartDate && stagedEndDate && stagedDurationInDays > 0) {
+      setStagedDurationValue(stagedDurationInDays);
+    }
+  }, [stagedStartDate, stagedEndDate, stagedDurationInDays]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        if (appliedDurationValue) {
+          setStagedDurationValue(appliedDurationValue);
+          const startDate = new Date(today);
+          startDate.setDate(today.getDate() - appliedDurationValue + 1);
+          setStagedStartDate(startDate);
+          setStagedEndDate(today);
+        } else {
+          setStagedStartDate(null);
+          setStagedEndDate(today);
+          setStagedDurationValue(15);
+        }
       }
     }
 
@@ -82,7 +97,7 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
       document.addEventListener('mousedown', handleClickOutside);
       return () => document.removeEventListener('mousedown', handleClickOutside);
     }
-  }, [isOpen]);
+  }, [isOpen, appliedDurationValue, today]);
 
   const formatDate = (date: Date): string => {
     return date.toISOString().split('T')[0];
@@ -92,13 +107,13 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
     const start = new Date(date);
     start.setHours(0, 0, 0, 0);
 
-    setSelectedStartDate(start);
-    setSelectedEndDate(today);
+    setStagedStartDate(start);
+    setStagedEndDate(today);
   };
 
   const handleDurationChange = (newDuration: number, unit: DurationUnit) => {
-    setDurationValue(newDuration);
-    setDurationUnit(unit);
+    setStagedDurationValue(newDuration);
+    setStagedDurationUnit(unit);
 
     const startDate = new Date(today);
 
@@ -115,22 +130,25 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
         break;
     }
 
-    setSelectedStartDate(startDate);
-    setSelectedEndDate(today);
+    setStagedStartDate(startDate);
+    setStagedEndDate(today);
   };
 
   const handleApply = () => {
-    if (selectedStartDate && selectedEndDate) {
-      onChange(durationValue);
-    } else if (selectedStartDate) {
-      onChange(durationValue);
+    if (stagedStartDate && stagedEndDate) {
+      onChange(stagedDurationValue);
+      setAppliedDurationValue(stagedDurationValue);
+    } else if (stagedStartDate) {
+      onChange(stagedDurationValue);
+      setAppliedDurationValue(stagedDurationValue);
     }
     setIsOpen(false);
   };
 
   const handleClear = () => {
-    setSelectedStartDate(null);
-    setSelectedEndDate(null);
+    setStagedStartDate(null);
+    setStagedEndDate(null);
+    setAppliedDurationValue(null);
     onChange(null);
     setIsOpen(false);
   };
@@ -144,22 +162,22 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
   };
 
   const isDateInRange = (date: Date): boolean => {
-    if (!selectedStartDate) return false;
-    if (!selectedEndDate) {
-      return formatDate(date) === formatDate(selectedStartDate);
+    if (!stagedStartDate) return false;
+    if (!stagedEndDate) {
+      return formatDate(date) === formatDate(stagedStartDate);
     }
     const dateStr = formatDate(date);
-    const startStr = formatDate(selectedStartDate);
-    const endStr = formatDate(selectedEndDate);
+    const startStr = formatDate(stagedStartDate);
+    const endStr = formatDate(stagedEndDate);
     return dateStr >= startStr && dateStr <= endStr;
   };
 
   const isDateStart = (date: Date): boolean => {
-    return selectedStartDate ? formatDate(date) === formatDate(selectedStartDate) : false;
+    return stagedStartDate ? formatDate(date) === formatDate(stagedStartDate) : false;
   };
 
   const isDateEnd = (date: Date): boolean => {
-    return selectedEndDate ? formatDate(date) === formatDate(selectedEndDate) : false;
+    return stagedEndDate ? formatDate(date) === formatDate(stagedEndDate) : false;
   };
 
   const renderCalendar = (monthDate: Date) => {
@@ -219,11 +237,8 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
   };
 
   const displayValue = () => {
-    if (selectedStartDate && selectedEndDate && durationInDays) {
-      return `${durationInDays} ${durationInDays === 1 ? 'day' : 'days'}`;
-    }
-    if (selectedStartDate) {
-      return formatDate(selectedStartDate);
+    if (appliedDurationValue) {
+      return `${appliedDurationValue} ${appliedDurationValue === 1 ? 'day' : 'days'}`;
     }
     return 'Select date range...';
   };
@@ -234,14 +249,14 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={clsx(
-          'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-900',
+          'inline-flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-gray-900 cursor-pointer',
+          'border border-gray-200 rounded-lg bg-white',
           'focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-100',
-          'bg-gray-100 rounded-sm',
-          'hover:border-gray-300 transition-colors',
+          'hover:border-violet-500 transition-all duration-150',
           isOpen && 'border-violet-500 ring-2 ring-violet-100'
         )}
       >
-        <span className={clsx('truncate', !selectedStartDate && 'text-gray-400')}>
+        <span className={clsx('truncate', !appliedDurationValue && 'text-gray-400')}>
           {displayValue()}
         </span>
       </button>
@@ -252,12 +267,12 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
             <div className="flex items-center gap-2">
               <input
                 type="number"
-                value={durationValue}
+                value={stagedDurationValue}
                 onChange={(e) => {
                   const val = parseInt(e.target.value) || 0;
-                  setDurationValue(val);
+                  setStagedDurationValue(val);
                   if (val > 0) {
-                    handleDurationChange(val, durationUnit);
+                    handleDurationChange(val, stagedDurationUnit);
                   }
                 }}
                 min={1}
@@ -278,7 +293,7 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
                     'min-w-[80px] justify-between'
                   )}
                 >
-                  <span>{durationUnit}</span>
+                  <span>{stagedDurationUnit}</span>
                   <ChevronDown className="w-4 h-4 text-gray-400" />
                 </button>
                 {showDurationSelector && (
@@ -288,15 +303,15 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
                         key={unit}
                         type="button"
                         onClick={() => {
-                          setDurationUnit(unit);
+                          setStagedDurationUnit(unit);
                           setShowDurationSelector(false);
-                          if (durationValue > 0) {
-                            handleDurationChange(durationValue, unit);
+                          if (stagedDurationValue > 0) {
+                            handleDurationChange(stagedDurationValue, unit);
                           }
                         }}
                         className={clsx(
                           'w-full px-3 py-2 text-left text-sm',
-                          durationUnit === unit
+                          stagedDurationUnit === unit
                             ? 'bg-violet-50 text-violet-900'
                             : 'text-gray-700 hover:bg-gray-50'
                         )}
@@ -340,10 +355,10 @@ export function DateRangePicker({ value, onChange, property }: DateRangePickerPr
               <button
                 type="button"
                 onClick={handleApply}
-                disabled={!selectedStartDate}
+                disabled={!stagedStartDate}
                 className={clsx(
                   'px-4 py-2 text-sm font-medium rounded',
-                  selectedStartDate
+                  stagedStartDate
                     ? 'bg-violet-600 text-white hover:bg-violet-700'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 )}
