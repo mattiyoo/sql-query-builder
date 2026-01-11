@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
         const result = await query<{ [key: string]: string }>(sql);
 
-        const values = result.rows.map(row => row[field]);
+        const values = result.rows.map((row: any) => row[field]);
 
         return NextResponse.json({
             field,
