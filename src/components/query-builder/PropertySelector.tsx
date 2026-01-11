@@ -2,10 +2,10 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import clsx from 'clsx';
-import { ChevronDown } from 'lucide-react';
 import type { FilterField } from '@/commons/models/filter.model';
-import { FILTER_FIELDS, getFieldMeta } from '@/commons/models/filter.model';
+import { getDynamicFields } from '@/commons/models/filter.model';
 import { PropertySelectorDropdown } from './PropertySelectorDropdown';
+import type { TableSchema } from '@/commons/models/database.model';
 
 interface PropertySelectorProps {
   value: FilterField;
@@ -14,6 +14,7 @@ interface PropertySelectorProps {
   isOpen?: boolean;
   onClose?: () => void;
   autoCloseOnSelect?: boolean;
+  schema?: TableSchema;
 }
 
 export function PropertySelector({
@@ -23,6 +24,7 @@ export function PropertySelector({
   isOpen: controlledIsOpen,
   onClose,
   autoCloseOnSelect = true,
+  schema,
 }: PropertySelectorProps) {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -36,9 +38,13 @@ export function PropertySelector({
     }
   };
 
+  const availableFields = useMemo(() => {
+    return getDynamicFields(schema);
+  }, [schema]);
+
   const selectedField = useMemo(() => {
-    return FILTER_FIELDS.find(f => f.value === value) || FILTER_FIELDS[0];
-  }, [value]);
+    return availableFields.find(f => f.value === value) || availableFields[0];
+  }, [value, availableFields]);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -87,10 +93,10 @@ export function PropertySelector({
             isOpen={true}
             initialCategory="All"
             autoFocus={true}
+            schema={schema}
           />
         </div>
       )}
     </div>
   );
 }
-

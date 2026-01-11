@@ -1,19 +1,12 @@
-export type FilterField =
-  | 'all'
-  | 'name'
-  | 'email'
-  | 'company'
-  | 'country'
-  | 'employees'
-  | 'age'
-  | 'created'
-  | 'lastActive';
+import type { TableSchema } from './database.model';
+
+export type FilterField = string;
 
 export interface FilterFieldMeta {
   value: FilterField;
   label: string;
   type: 'text' | 'number' | 'date' | 'boolean';
-  category: 'All' | 'User' | 'Company';
+  category: string;
 }
 
 export const FILTER_FIELDS: FilterFieldMeta[] = [
@@ -28,8 +21,73 @@ export const FILTER_FIELDS: FilterFieldMeta[] = [
   { value: 'lastActive', label: 'Last Active', type: 'date', category: 'User' },
 ];
 
-export function getFieldMeta(field: FilterField): FilterFieldMeta {
-  return FILTER_FIELDS.find(f => f.value === field) || FILTER_FIELDS[0];
+export function getDynamicFieldMeta(field: FilterField, schema?: TableSchema): FilterFieldMeta {
+  if (!schema) {
+    return FILTER_FIELDS.find(f => f.value === field) || FILTER_FIELDS[1];
+  }
+
+  const column = schema.columns.find(col => col.name === field);
+  if (!column) {
+    const firstCol = schema.columns[0];
+    return {
+      value: firstCol.name,
+      label: formatColumnLabel(firstCol.name),
+      type: mapToFilterType(firstCol.queryBuilderType),
+      category: 'Column',
+    };
+  }
+
+  return {
+    value: column.name,
+    label: formatColumnLabel(column.name),
+    type: mapToFilterType(column.queryBuilderType),
+    category: getCategoryFromType(column.queryBuilderType),
+  };
+}
+
+export function getDynamicFields(schema?: TableSchema): FilterFieldMeta[] {
+  if (!schema) {
+    return FILTER_FIELDS;
+  }
+
+  return schema.columns.map(col => ({
+    value: col.name,
+    label: formatColumnLabel(col.name),
+    type: mapToFilterType(col.queryBuilderType),
+    category: getCategoryFromType(col.queryBuilderType),
+  }));
+}
+
+function mapToFilterType(dbType: string): 'text' | 'number' | 'date' | 'boolean' {
+  if (dbType === 'select') return 'text';
+  if (dbType === 'text' || dbType === 'number' || dbType === 'date' || dbType === 'boolean') {
+    return dbType;
+  }
+  return 'text';
+}
+
+function formatColumnLabel(columnName: string): string {
+  return columnName
+    .split('_')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
+}
+
+function getCategoryFromType(type: string): string {
+  switch (type) {
+    case 'number':
+      return 'Numeric';
+    case 'date':
+      return 'Date';
+    case 'boolean':
+      return 'Boolean';
+    default:
+      return 'Text';
+  }
+}
+
+export function getFieldMeta(field: FilterField, schema?: TableSchema): FilterFieldMeta {
+  return getDynamicFieldMeta(field, schema);
 }
 
 export type FilterOperator =
@@ -135,6 +193,7 @@ export interface Filter {
   operator: FilterOperator;
   value: string | number | [string, string] | null;
   combinator?: CombinatorType;
+  overrideType?: 'text' | 'number' | 'date' | 'boolean';
 }
 
 export const DEFAULT_FILTER: Filter = {

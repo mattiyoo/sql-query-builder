@@ -346,7 +346,7 @@ function evaluateFilterGroup(user: User, group: FilterGroup): boolean {
 
 export function filterGroupsToSql(filterGroups: FilterGroup[]): string {
   if (!filterGroups || filterGroups.length === 0) {
-    return 'SELECT * FROM users';
+    return '';
   }
 
   const groupSqls: string[] = [];
@@ -383,14 +383,14 @@ export function filterGroupsToSql(filterGroups: FilterGroup[]): string {
   });
 
   if (groupSqls.length === 0) {
-    return 'SELECT * FROM users';
+    return '';
   }
 
   if (groupSqls.length > 1 && (groupSqls[0] === 'AND' || groupSqls[0] === 'OR')) {
     groupSqls.shift();
   }
 
-  return `SELECT * FROM users WHERE ${groupSqls.join(' ')}`;
+  return groupSqls.join(' ');
 }
 
 export { executeFilters as executeQuery };

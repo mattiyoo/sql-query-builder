@@ -4,21 +4,26 @@ import { Controller, type Control, type FieldValues, type Path, useFieldArray, u
 import clsx from 'clsx';
 import { Plus } from 'lucide-react';
 import { FilterGroup } from './FilterGroup';
-import { CombinatorSelector, CombinatorSelectorToggle } from './CombinatorSelector';
+import { CombinatorSelectorToggle } from './CombinatorSelector';
 import { DEFAULT_FILTER_GROUP, type CombinatorType } from '@/commons/models/filter.model';
 import type { SqlFormValues } from '@/commons/forms/sql.form';
+import type { TableSchema } from '@/commons/models/database.model';
 
 interface MixpanelQueryBuilderProps<TFieldValues extends FieldValues = FieldValues> {
   control?: Control<TFieldValues>;
   name?: Path<TFieldValues>;
   numberOfUsers?: number;
   subtitle?: string;
+  schema?: TableSchema;
+  tableName?: string;
 }
 
 export function MixpanelQueryBuilder<TFieldValues extends FieldValues = FieldValues>({
   control,
   name = 'filterGroups' as Path<TFieldValues>,
   numberOfUsers,
+  schema,
+  tableName,
 }: MixpanelQueryBuilderProps<TFieldValues>) {
   if (!control) {
     throw new Error('MixpanelQueryBuilder requires a control prop from react-hook-form');
@@ -47,6 +52,8 @@ export function MixpanelQueryBuilder<TFieldValues extends FieldValues = FieldVal
           fields={fields}
           control={control}
           numberOfUsers={numberOfUsers || 0}
+          schema={schema}
+          tableName={tableName}
         />
       )}
 
@@ -98,10 +105,14 @@ function FilterGroupsList<TFieldValues extends FieldValues = SqlFormValues>({
   fields,
   control,
   numberOfUsers,
+  schema,
+  tableName,
 }: {
   fields: Array<{ id: string }>;
   control: Control<TFieldValues>;
   numberOfUsers: number;
+  schema?: TableSchema;
+  tableName?: string;
 }) {
   const filterGroups = useWatch({
     control: control as any,
@@ -163,6 +174,8 @@ function FilterGroupsList<TFieldValues extends FieldValues = SqlFormValues>({
                 isFirst={isFirst}
                 isLast={index === fields.length - 1}
                 isConnectedToNext={isConnectedToNext}
+                schema={schema}
+                tableName={tableName}
               />
             </div>
           </div>

@@ -1,25 +1,52 @@
 'use client';
 
+import { useMemo } from 'react';
 import type { User } from '@/commons/models/user.model';
+import type { TableSchema } from '@/commons/models/database.model';
 import clsx from 'clsx';
 import { Inbox } from 'lucide-react';
+import { ColumnResizeHandle } from './ColumnResizeHandle';
 
 interface DataTableProps {
-    data: User[];
+    data: User[] | any[];
     isLoading?: boolean;
+    schema?: TableSchema | null;
+    visibleColumns?: string[];
+    columnWidths?: Record<string, number>;
+    onColumnWidthChange?: (columnKey: string, width: number) => void;
 }
 
-export function DataTable({ data, isLoading }: DataTableProps) {
-    const columns: { key: keyof User; label: string; width?: string }[] = [
-        { key: 'name', label: 'Name', width: 'w-40' },
-        { key: 'email', label: 'Email', width: 'w-48' },
-        { key: 'company', label: 'Company', width: 'w-40' },
-        { key: 'country', label: 'Country', width: 'w-24' },
-        { key: 'employees', label: '# Employees', width: 'w-28' },
-        { key: 'age', label: 'Age', width: 'w-16' },
-        { key: 'created', label: 'Created', width: 'w-28' },
-        { key: 'lastActive', label: 'Last Active', width: 'w-28' },
-    ];
+export function DataTable({ data, isLoading, schema, visibleColumns, columnWidths, onColumnWidthChange }: DataTableProps) {
+    const allColumns = useMemo(() => {
+        if (schema) {
+            return schema.columns.map(col => ({
+                key: col.name,
+                label: col.name.split('_').map(word =>
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' '),
+                type: col.queryBuilderType,
+            }));
+        }
+
+        if (data.length > 0) {
+            return Object.keys(data[0]).map(key => ({
+                key,
+                label: key.split('_').map(word =>
+                    word.charAt(0).toUpperCase() + word.slice(1)
+                ).join(' '),
+                type: 'text' as const,
+            }));
+        }
+
+        return [];
+    }, [schema, data]);
+
+    const columns = useMemo(() => {
+        if (!visibleColumns || visibleColumns.length === 0) {
+            return allColumns;
+        }
+        return allColumns.filter(col => visibleColumns.includes(col.key));
+    }, [allColumns, visibleColumns]);
 
     return (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
@@ -30,12 +57,21 @@ export function DataTable({ data, isLoading }: DataTableProps) {
                             {columns.map((column) => (
                                 <th
                                     key={column.key}
-                                    className={clsx(
-                                        'px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider',
-                                        column.width
-                                    )}
+                                    className="px-4 py-3 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider relative"
+                                    style={{
+                                        width: columnWidths?.[column.key] || 'auto',
+                                        minWidth: columnWidths?.[column.key] || 80,
+                                    }}
                                 >
-                                    {column.label}
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-nowrap">{column.label}</span>
+                                        {onColumnWidthChange && (
+                                            <ColumnResizeHandle
+                                                columnKey={column.key}
+                                                onResize={(width) => onColumnWidthChange(column.key, width)}
+                                            />
+                                        )}
+                                    </div>
                                 </th>
                             ))}
                         </tr>
@@ -73,12 +109,9 @@ export function DataTable({ data, isLoading }: DataTableProps) {
                                     {columns.map((column) => (
                                         <td
                                             key={column.key}
-                                            className={clsx(
-                                                'px-4 py-3 text-sm text-gray-900',
-                                                column.width
-                                            )}
+                                            className="px-4 py-3 text-sm text-gray-900 text-nowrap"
                                         >
-                                            {formatCellValue(column.key, user[column.key])}
+                                            {formatCellValue(column.key, column.type, user[column.key])}
                                         </td>
                                     ))}
                                 </tr>
@@ -91,16 +124,16 @@ export function DataTable({ data, isLoading }: DataTableProps) {
     );
 }
 
-function formatCellValue(key: keyof User, value: unknown): string {
+function formatCellValue(key: string, type: string, value: unknown): string {
     if (value === null || value === undefined) {
         return '—';
     }
 
-    if (key === 'employees' || key === 'revenue') {
+    if (type === 'number') {
         return Number(value).toLocaleString();
     }
 
-    if (key === 'created' || key === 'lastActive') {
+    if (type === 'date') {
         try {
             return new Date(value as string).toLocaleDateString('en-US', {
                 year: 'numeric',
@@ -112,5 +145,10 @@ function formatCellValue(key: keyof User, value: unknown): string {
         }
     }
 
+    if (type === 'boolean') {
+        return value ? 'Yes' : 'No';
+    }
+
     return String(value);
 }
+

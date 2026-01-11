@@ -9,6 +9,8 @@ import { CombinatorSelector } from './CombinatorSelector';
 import { PropertySelectorDropdown } from './PropertySelectorDropdown';
 import { DEFAULT_FILTER, type FilterField, type CombinatorType } from '@/commons/models/filter.model';
 import type { SqlFormValues } from '@/commons/forms/sql.form';
+import type { TableSchema } from '@/commons/models/database.model';
+import { pluralizeTableName } from '@/lib/table-utils';
 
 interface FilterGroupProps {
   groupIndex: number;
@@ -18,6 +20,8 @@ interface FilterGroupProps {
   isFirst?: boolean;
   isLast?: boolean;
   isConnectedToNext?: boolean;
+  schema?: TableSchema;
+  tableName?: string;
 }
 
 export function FilterGroup({
@@ -28,6 +32,8 @@ export function FilterGroup({
   isFirst = false,
   isLast = false,
   isConnectedToNext = false,
+  schema,
+  tableName,
 }: FilterGroupProps) {
   const { control } = useFormContext<SqlFormValues>();
   const { fields, append, remove } = useFieldArray({
@@ -86,7 +92,7 @@ export function FilterGroup({
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
             <GripVertical className="w-4 h-4" />
-            All Users
+            All {pluralizeTableName(tableName || 'users')}
           </span>
         </div>
       </div>
@@ -110,6 +116,7 @@ export function FilterGroup({
                     index={index}
                     onRemove={() => handleRemoveFilter(index)}
                     groupPath={`filterGroups.${groupIndex}.filters`}
+                    schema={schema}
                   />
                 </div>
               </div>
@@ -145,6 +152,7 @@ export function FilterGroup({
               <AddFilterPropertySelector
                 onPropertySelected={handlePropertySelected}
                 onCancel={handleCancelAddFilter}
+                schema={schema}
               />
             </div>
           )}
@@ -180,9 +188,11 @@ function FilterCombinatorSelector({
 function AddFilterPropertySelector({
   onPropertySelected,
   onCancel,
+  schema,
 }: {
   onPropertySelected: (property: FilterField) => void;
   onCancel: () => void;
+  schema?: TableSchema;
 }) {
   const handleSelect = (property: FilterField) => {
     if (property === 'all') return;
@@ -196,6 +206,7 @@ function AddFilterPropertySelector({
       isOpen={true}
       initialCategory="All"
       autoFocus={true}
+      schema={schema}
     />
   );
 }

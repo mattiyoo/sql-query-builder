@@ -6,7 +6,7 @@ import clsx from 'clsx';
 import { X, ChevronDown, MoreVertical } from 'lucide-react';
 import type { FilterField, FilterOperator } from '@/commons/models/filter.model';
 import {
-  getFieldMeta,
+  getDynamicFieldMeta,
   getOperatorsForFieldType,
   operatorRequiresValue,
 } from '@/commons/models/filter.model';
@@ -15,14 +15,17 @@ import { PropertySelector } from './PropertySelector';
 import { AutocompleteInput } from './AutocompleteInput';
 import { RangeAutocompleteInput } from './RangeAutocompleteInput';
 import { DateRangePicker } from './DateRangePicker';
+import { DataTypeSelector } from './DataTypeSelector';
+import type { TableSchema } from '@/commons/models/database.model';
 
 interface FilterRowProps {
   index: number;
   onRemove: () => void;
   groupPath?: string;
+  schema?: TableSchema;
 }
 
-export function FilterRow({ index, onRemove, groupPath = 'filters' }: FilterRowProps) {
+export function FilterRow({ index, onRemove, groupPath = 'filters', schema }: FilterRowProps) {
   const { control, setValue } = useFormContext<SqlFormValues>();
 
   const basePath = `${groupPath}.${index}`;
@@ -30,9 +33,12 @@ export function FilterRow({ index, onRemove, groupPath = 'filters' }: FilterRowP
   const property = useWatch({ control, name: `${basePath}.property` as any });
   const operator = useWatch({ control, name: `${basePath}.operator` as any });
   const value = useWatch({ control, name: `${basePath}.value` as any });
+  const overrideType = useWatch({ control, name: `${basePath}.overrideType` as any });
 
-  const propertyMeta = getFieldMeta(property || 'name');
-  const availableOperators = getOperatorsForFieldType(propertyMeta.type);
+  const propertyMeta = getDynamicFieldMeta(property || (schema?.columns[0]?.name || 'name'), schema);
+
+  const effectiveType = overrideType || propertyMeta.type;
+  const availableOperators = getOperatorsForFieldType(effectiveType);
 
   useEffect(() => {
     if (property) {
@@ -51,14 +57,15 @@ export function FilterRow({ index, onRemove, groupPath = 'filters' }: FilterRowP
 
   const handlePropertyChange = useCallback(
     (newProperty: FilterField) => {
-      const newMeta = getFieldMeta(newProperty);
+      const newMeta = getDynamicFieldMeta(newProperty, schema);
       const newOperators = getOperatorsForFieldType(newMeta.type);
 
       setValue(`${basePath}.value` as any, null, { shouldDirty: true, shouldValidate: true });
       setValue(`${basePath}.property` as any, newProperty, { shouldDirty: true, shouldValidate: true });
       setValue(`${basePath}.operator` as any, newOperators[0]?.value || '=', { shouldDirty: true, shouldValidate: true });
+      setValue(`${basePath}.overrideType` as any, undefined, { shouldDirty: true, shouldValidate: true });
     },
-    [basePath, setValue]
+    [basePath, setValue, schema]
   );
 
   const handleOperatorChange = useCallback(
@@ -82,11 +89,12 @@ export function FilterRow({ index, onRemove, groupPath = 'filters' }: FilterRowP
         name={`${basePath}.property` as any}
         render={({ field }) => (
           <PropertySelector
-            value={field.value || 'name'}
+            value={field.value || (schema?.columns[0]?.name || 'name')}
             onChange={(newValue) => {
               field.onChange(newValue);
               handlePropertyChange(newValue);
             }}
+            schema={schema}
           />
         )}
       />
@@ -96,8 +104,9 @@ export function FilterRow({ index, onRemove, groupPath = 'filters' }: FilterRowP
         control={control}
         name={`${basePath}.operator` as any}
         render={({ field }) => {
-          const currentPropertyMeta = getFieldMeta(property || 'name');
-          const currentAvailableOperators = getOperatorsForFieldType(currentPropertyMeta.type);
+          const currentPropertyMeta = getDynamicFieldMeta(property || (schema?.columns[0]?.name || 'name'), schema);
+          const currentEffectiveType = overrideType || currentPropertyMeta.type;
+          const currentAvailableOperators = getOperatorsForFieldType(currentEffectiveType);
 
           const validOperatorValues = currentAvailableOperators.map(op => op.value);
           const currentOperator = validOperatorValues.includes(field.value || '=')
@@ -110,7 +119,7 @@ export function FilterRow({ index, onRemove, groupPath = 'filters' }: FilterRowP
             }
           }
 
-          const operatorsKey = `${property}-${currentAvailableOperators.map(op => op.value).join(',')}`;
+          const operatorsKey = `${property}-${currentEffectiveType}-${currentAvailableOperators.map(op => op.value).join(',')}`;
 
           return (
             <OperatorSelector
@@ -131,16 +140,14 @@ export function FilterRow({ index, onRemove, groupPath = 'filters' }: FilterRowP
           control={control}
           name={`${basePath}.value` as any}
           render={({ field }) => {
-            const currentPropertyMeta = getFieldMeta(property || 'name');
-
             return (
               <FilterValueInput
-                key={`value-${basePath}-${property}`}
+                key={`value-${basePath}-${property}-${effectiveType}`}
                 value={field.value}
                 onChange={field.onChange}
                 operator={operator || '='}
-                fieldType={currentPropertyMeta.type}
-                property={property || 'name'}
+                fieldType={effectiveType}
+                property={property || (schema?.columns[0]?.name || 'name')}
               />
             );
           }}
@@ -148,17 +155,22 @@ export function FilterRow({ index, onRemove, groupPath = 'filters' }: FilterRowP
       )}
 
       <div className="flex items-center gap-1">
-        <button
-          type="button"
-          className={clsx(
-            'w-6 h-6 flex items-center justify-center rounded',
-            'text-gray-400 hover:text-gray-600 hover:bg-gray-100',
-            'transition-colors'
+        <Controller
+          control={control}
+          name={`${basePath}.overrideType` as any}
+          render={({ field }) => (
+            <DataTypeSelector
+              detectedType={propertyMeta.type}
+              overrideType={field.value}
+              onTypeChange={(newType) => {
+                field.onChange(newType);
+                setValue(`${basePath}.value` as any, null, { shouldDirty: true });
+                const newOperators = getOperatorsForFieldType(newType || propertyMeta.type);
+                setValue(`${basePath}.operator` as any, newOperators[0]?.value || '=', { shouldDirty: true });
+              }}
+            />
           )}
-          aria-label="More options"
-        >
-          <MoreVertical className="w-4 h-4" />
-        </button>
+        />
         <button
           type="button"
           onClick={onRemove}

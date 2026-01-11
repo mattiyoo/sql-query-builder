@@ -4,59 +4,133 @@ import { useMemo, useState, useEffect } from 'react';
 import { FormProvider } from 'react-hook-form';
 import { MixpanelQueryBuilder } from '@/components/query-builder';
 import { DataTable } from '@/components/data-table';
+import { DatabaseConnectionModal } from '@/components/DatabaseConnection';
+import { TableSelector } from '@/components/TableSelector';
+import { ColumnManager } from '@/components/ColumnManager';
 import { executeFilterGroups, filterGroupsToSql } from '@/lib/query-executor';
-import type { User } from '@/commons/models/user.model';
+import type { DatabaseConnection, TableSchema } from '@/commons/models/database.model';
 import { LayoutGrid, Search, ChevronDown } from 'lucide-react';
 import { useWatch } from 'react-hook-form';
 import { sqlForm, type SqlFormValues } from '@/commons/forms/sql.form';
+import { singularizeTableName } from '@/lib/table-utils';
 
 export default function Home() {
   const { form } = sqlForm();
-  const [users, setUsers] = useState<User[]>([]);
+
+  const [connection, setConnection] = useState<DatabaseConnection>({ type: 'default' });
+  const [selectedTable, setSelectedTable] = useState<string>('users');
+  const [tableSchema, setTableSchema] = useState<TableSchema | null>(null);
+
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([]);
+  const [columnWidths, setColumnWidths] = useState<Record<string, number>>({});
+
+  const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    async function fetchUsers() {
+    const saved = localStorage.getItem('dbConnection');
+    if (saved) {
       try {
-        const response = await fetch('/api/users');
-        if (!response.ok) {
-          throw new Error('Failed to fetch users');
+        const parsed = JSON.parse(saved);
+        setConnection(parsed);
+      } catch (e) {
+        console.error('Failed to parse saved connection:', e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedTable) return;
+
+    async function fetchSchema() {
+      try {
+        const response = await fetch('/api/schema/columns', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            connectionString: connection.type === 'custom' ? connection.connectionString : undefined,
+            tableName: selectedTable,
+          }),
+        });
+
+        if (response.ok) {
+          const schema = await response.json();
+          setTableSchema(schema);
+
+          if (schema.columns && schema.columns.length > 0) {
+            setVisibleColumns(schema.columns.map((col: any) => col.name));
+          }
+        } else {
+          console.error('Failed to fetch schema');
         }
-        const data = await response.json();
-        setUsers(data.users);
+      } catch (err) {
+        console.error('Error fetching schema:', err);
+      }
+    }
+
+    fetchSchema();
+  }, [connection, selectedTable]);
+
+
+  useEffect(() => {
+    if (!selectedTable) return;
+
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+
+      try {
+        const response = await fetch('/api/query', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            connectionString: connection.type === 'custom' ? connection.connectionString : undefined,
+            tableName: selectedTable,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to fetch data');
+        }
+
+        const result = await response.json();
+        setData(result.data);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred');
-        console.error('Error fetching users:', err);
+        console.error('Error fetching data:', err);
       } finally {
         setLoading(false);
       }
     }
 
-    fetchUsers();
-  }, []);
+    fetchData();
+  }, [connection, selectedTable]);
 
   const searchValue = useWatch({ control: form.control, name: 'search' });
   const filterGroups = useWatch({ control: form.control, name: 'filterGroups' }) || [];
 
   const filteredData = useMemo(() => {
-    const filteredByGroups = executeFilterGroups(users, filterGroups);
+    const filteredByGroups = executeFilterGroups(data, filterGroups);
     const term = String(searchValue ?? '').trim().toLowerCase();
     if (!term) return filteredByGroups;
 
-    return filteredByGroups.filter((u: User) => {
-      return (
-        u.name.toLowerCase().includes(term) ||
-        u.email.toLowerCase().includes(term) ||
-        u.company.toLowerCase().includes(term) ||
-        u.country.toLowerCase().includes(term)
+    return filteredByGroups.filter((row: any) => {
+      return Object.values(row).some(value =>
+        String(value).toLowerCase().includes(term)
       );
     });
-  }, [filterGroups, searchValue, users]);
+  }, [filterGroups, searchValue, data]);
 
   const sqlPreview = useMemo(() => {
-    return filterGroupsToSql(filterGroups);
-  }, [filterGroups]);
+    const whereClause = filterGroupsToSql(filterGroups);
+    const columnsStr = visibleColumns.length > 0
+      ? visibleColumns.join(', ')
+      : '*';
+
+    const baseQuery = `SELECT ${columnsStr} FROM ${selectedTable}`;
+    return whereClause ? `${baseQuery} WHERE ${whereClause}` : baseQuery;
+  }, [filterGroups, visibleColumns, selectedTable]);
 
   return (
     <FormProvider {...form}>
@@ -72,6 +146,11 @@ export default function Home() {
                   <span className="font-semibold text-gray-900">Query Builder</span>
                 </div>
               </div>
+
+              <DatabaseConnectionModal
+                connection={connection}
+                onConnectionChange={setConnection}
+              />
             </div>
           </div>
         </header>
@@ -79,7 +158,7 @@ export default function Home() {
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <div className="text-gray-500">Loading users...</div>
+              <div className="text-gray-500">Loading data...</div>
             </div>
           ) : error ? (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4">
@@ -88,14 +167,21 @@ export default function Home() {
           ) : (
             <>
               <div className="mb-6">
-                <div className="flex items-center gap-2 text-sm text-gray-500 mb-1">
-                  <span>Analyze Uniques by</span>
-                  <button className="flex items-center gap-1 text-gray-900 font-medium hover:text-violet-600">
-                    User
-                    <ChevronDown className="w-4 h-4" />
-                  </button>
+                <div className="flex items-center gap-4 mb-4">
+                  <TableSelector
+                    connection={connection}
+                    selectedTable={selectedTable}
+                    onTableChange={setSelectedTable}
+                  />
+
+                  <div className="text-sm text-gray-500">
+                    {tableSchema && `${tableSchema.columns.length} columns`}
+                  </div>
                 </div>
-                <h1 className="text-2xl font-bold text-gray-900">Users</h1>
+
+                <h1 className="text-2xl font-bold text-gray-900 capitalize">
+                  {selectedTable}
+                </h1>
               </div>
 
               <div className="grid gap-6">
@@ -105,7 +191,9 @@ export default function Home() {
                       <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                         {filteredData.length}
                       </span>
-                      <span className="text-sm text-gray-400">• Users with Profiles</span>
+                      <span className="text-sm text-gray-400">
+                        • {singularizeTableName(selectedTable || 'users')}
+                      </span>
                     </div>
                   </div>
 
@@ -122,13 +210,21 @@ export default function Home() {
                         ⌘K
                       </span>
                     </div>
+
+                    <ColumnManager
+                      schema={tableSchema}
+                      visibleColumns={visibleColumns}
+                      onVisibleColumnsChange={setVisibleColumns}
+                    />
                   </div>
                 </div>
 
                 <MixpanelQueryBuilder<SqlFormValues>
                   control={form.control}
                   name="filterGroups"
-                  numberOfUsers={users.length}
+                  numberOfUsers={data.length}
+                  schema={tableSchema || undefined}
+                  tableName={selectedTable || 'users'}
                 />
 
                 {filterGroups.length > 0 && filterGroups.some(g => g.filters && g.filters.length > 0) && (
@@ -140,7 +236,15 @@ export default function Home() {
                   </div>
                 )}
 
-                <DataTable data={filteredData} />
+                <DataTable
+                  data={filteredData}
+                  schema={tableSchema}
+                  visibleColumns={visibleColumns}
+                  columnWidths={columnWidths}
+                  onColumnWidthChange={(columnKey, width) => {
+                    setColumnWidths(prev => ({ ...prev, [columnKey]: width }));
+                  }}
+                />
               </div>
             </>
           )}

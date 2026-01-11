@@ -4,8 +4,9 @@ import { useState, useRef, useEffect, useMemo } from 'react';
 import clsx from 'clsx';
 import { Search, Check, Clock, Zap, MoreVertical } from 'lucide-react';
 import type { FilterField, FilterFieldMeta } from '@/commons/models/filter.model';
-import { FILTER_FIELDS, getFieldMeta } from '@/commons/models/filter.model';
+import { getDynamicFields, getDynamicFieldMeta } from '@/commons/models/filter.model';
 import { users } from '@/lib/dummy-data';
+import type { TableSchema } from '@/commons/models/database.model';
 
 interface PropertySelectorDropdownProps {
   selectedValue?: FilterField;
@@ -13,6 +14,7 @@ interface PropertySelectorDropdownProps {
   isOpen?: boolean;
   initialCategory?: 'All' | 'User';
   autoFocus?: boolean;
+  schema?: TableSchema;
 }
 
 export function PropertySelectorDropdown({
@@ -21,24 +23,35 @@ export function PropertySelectorDropdown({
   isOpen = true,
   initialCategory = 'All',
   autoFocus = false,
+  schema,
 }: PropertySelectorDropdownProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<'All' | 'User'>(initialCategory);
   const [hoveredProperty, setHoveredProperty] = useState<FilterField | null>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
-  const categories: Array<{ value: 'All' | 'User'; label: string; icon: string }> = [
-    { value: 'All', label: 'All', icon: 'Aa' },
-    { value: 'User', label: 'User', icon: '👤' },
-  ];
+  const allFields = useMemo(() => {
+    return getDynamicFields(schema).filter(f => f.value !== 'all');
+  }, [schema]);
+
+  const categories = useMemo(() => {
+    const uniqueCategories = new Set(allFields.map(f => f.category));
+    return [
+      { value: 'All' as const, label: 'All', icon: 'Aa' },
+      ...Array.from(uniqueCategories).map(cat => ({
+        value: cat as 'All' | 'User',
+        label: cat,
+        icon: cat === 'User' ? '👤' : cat === 'Numeric' ? '🔢' : cat === 'Date' ? '📅' : 'Aa',
+      })),
+    ];
+  }, [allFields]);
 
   const fieldsByCategory = useMemo(() => {
-    const allFields = FILTER_FIELDS.filter(f => f.value !== 'all');
-    if (selectedCategory === 'User') {
-      return allFields.filter(f => f.category === 'User');
+    if (selectedCategory === 'All') {
+      return allFields;
     }
-    return allFields;
-  }, [selectedCategory]);
+    return allFields.filter(f => f.category === selectedCategory);
+  }, [selectedCategory, allFields]);
 
   const filteredFields = searchTerm
     ? fieldsByCategory.filter(f =>
@@ -49,10 +62,10 @@ export function PropertySelectorDropdown({
 
   const displayFields = filteredFields || fieldsByCategory;
 
-  const detailProperty = hoveredProperty || selectedValue || 'name';
+  const detailProperty = hoveredProperty || selectedValue || allFields[0]?.value || 'name';
   const detailField = useMemo(() => {
-    return FILTER_FIELDS.find(f => f.value === detailProperty);
-  }, [detailProperty]);
+    return getDynamicFieldMeta(detailProperty, schema);
+  }, [detailProperty, schema]);
 
   const exampleValue = useMemo(() => {
     if (!detailField || !users.length) return null;
